@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LU | Voting Classifier Masterclass</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&family=Montserrat:wght@800;900&display=swap');
+        
+        :root {
+            --lu-gold: #B5A26C;
+            --obsidian: #020617;
+            --charcoal: #0f172a;
+            --neon-blue: #3b82f6;
+            --emerald: #10b981;
+            --error-red: #ef4444;
+            --purple: #a855f7;
+            --class-0: #ef4444; /* Red for Class 0 */
+            --class-1: #10b981; /* Green for Class 1 */
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--obsidian);
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+
+        .font-brand { font-family: 'Montserrat', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        .glass {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+        }
+
+        /* Metric Cards */
+        .metric-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 15px;
+            text-align: left;
+            transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+            cursor: pointer;
+            position: relative;
+        }
+        .metric-card:hover { 
+            transform: translateY(-4px); 
+            background: rgba(255,255,255,0.05);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            border-color: rgba(255,255,255,0.15);
+        }
+        .click-hint {
+            position: absolute;
+            top: 6px;
+            right: 8px;
+            font-size: 10px;
+            color: #64748b;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .metric-card:hover .click-hint { opacity: 1; }
+
+        /* Custom Toggles */
+        .toggle-btn {
+            padding: 8px 16px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            border-radius: 8px;
+            transition: all 0.3s;
+            cursor: pointer;
+            border: 1px solid transparent;
+            flex: 1;
+            text-align: center;
+        }
+        .toggle-btn.active {
+            background: var(--neon-blue);
+            color: white;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+        }
+        .toggle-btn:not(.active) {
+            background: rgba(255,255,255,0.05);
+            color: #94a3b8;
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        /* Slider Details */
+        .slider-custom {
+            accent-color: var(--lu-gold);
+            cursor: pointer;
+        }
+
+        /* Checkbox styling */
+        .model-checkbox {
+            appearance: none;
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 2px solid #475569;
+            border-radius: 0.25rem;
+            outline: none;
+            cursor: pointer;
+            position: relative;
+            background: rgba(0,0,0,0.2);
+            transition: all 0.2s;
+        }
+        .model-checkbox:checked {
+            background: var(--lu-gold);
+            border-color: var(--lu-gold);
+        }
+        .model-checkbox:checked::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--obsidian);
+            font-weight: 900;
+            font-size: 12px;
+        }
+
+        /* D3 Styles */
+        .axis-label { font-size: 10px; font-weight: 900; fill: #64748b; text-transform: uppercase; letter-spacing: 0.1em; }
+        .data-point { stroke: white; stroke-width: 1.5; transition: filter 0.2s; cursor: grab; }
+        .data-point:active { cursor: grabbing; }
+        .data-point:hover { filter: drop-shadow(0 0 10px rgba(255,255,255,0.8)); z-index: 50; }
+        
+        .class-0 { fill: var(--class-0); }
+        .class-1 { fill: var(--class-1); }
+
+        /* Dashboard Animation */
+        .vote-bar { transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s; }
+        .dashboard-panel { transition: border-color 0.3s, box-shadow 0.3s; }
+        .win-glow-0 { box-shadow: 0 0 30px rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); }
+        .win-glow-1 { box-shadow: 0 0 30px rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.5); }
+    </style>
+</head>
+<body class="p-4 flex flex-col min-h-screen">
+
+    <!-- Educational Modal -->
+    <div id="metric-modal" class="fixed inset-0 z-[200] hidden items-center justify-center bg-black/70 backdrop-blur-sm opacity-0 transition-opacity duration-300">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-8 max-w-lg w-full shadow-2xl transform scale-95 transition-transform duration-300" id="modal-content-box">
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h2 id="modal-title" class="text-2xl font-black text-white uppercase tracking-wider">Concept</h2>
+                    <p class="text-xs text-slate-400 font-bold tracking-widest uppercase mt-1">Algorithm Deep Dive</p>
+                </div>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-2 rounded-lg transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-6 text-sm text-slate-300">
+                <div class="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                    <strong class="flex items-center gap-2 text-blue-400 uppercase text-[10px] tracking-widest mb-2">
+                        <i data-lucide="book-open" class="w-3 h-3"></i> Definition
+                    </strong>
+                    <p id="modal-def" class="text-slate-200 leading-relaxed"></p>
+                </div>
+                
+                <div class="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                    <strong class="flex items-center gap-2 text-purple-400 uppercase text-[10px] tracking-widest mb-2">
+                        <i data-lucide="function-square" class="w-3 h-3"></i> The Math / Logic
+                    </strong>
+                    <div id="modal-form" class="font-mono text-center text-white font-bold bg-black/40 py-3 px-2 rounded-lg text-xs break-all flex flex-col items-center justify-center min-h-[50px] gap-2"></div>
+                </div>
+
+                <div class="bg-blue-900/20 p-4 rounded-xl border border-blue-500/20">
+                    <strong class="flex items-center gap-2 text-[--lu-gold] uppercase text-[10px] tracking-widest mb-2">
+                        <i data-lucide="lightbulb" class="w-3 h-3"></i> Why It Works
+                    </strong>
+                    <p id="modal-interp" class="text-blue-100 italic text-xs leading-relaxed"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-[1800px] w-full mx-auto flex flex-col h-full relative z-10">
+        <!-- HEADER -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 border-b border-white/5 pb-4 flex-shrink-0">
+            <div class="flex items-center gap-4">
+                <div class="bg-blue-500/10 p-3 rounded-xl border border-blue-500/20">
+                    <i data-lucide="users" class="text-blue-400 w-6 h-6"></i>
+                </div>
+                <div>
+                    <span class="font-brand text-[10px] tracking-[0.4em] text-[--lu-gold] uppercase block mb-1">DSCI 356000 | Lindenwood University</span>
+                    <h1 class="text-2xl md:text-3xl font-brand font-black text-white tracking-tighter uppercase leading-none">
+                        Voting Classifier <span class="text-transparent bg-clip-text bg-gradient-to-r from-[--lu-gold] to-white/40">Ensemble</span>
+                    </h1>
+                    <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Instructor: Mr. Kalauni • Wisdom of the Crowd</p>
+                </div>
+            </div>
+            
+            <div class="flex gap-2 bg-slate-900/50 p-1.5 rounded-xl border border-slate-800 flex-wrap justify-end">
+                <button onclick="generateData('moons')" id="btn-data-moons" class="px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all bg-white/10 text-white border border-blue-500/30">
+                    Non-Linear Data
+                </button>
+                <button onclick="generateData('linear')" id="btn-data-linear" class="px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all text-slate-400 hover:bg-white/5">
+                    Linear Data
+                </button>
+                <button onclick="clearData()" class="px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all text-red-400 hover:bg-red-500/20 border border-red-500/30 ml-2">
+                    Clear Canvas
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
+            
+            <!-- LEFT PANEL: CONTROLS & METRICS -->
+            <aside class="lg:col-span-3 flex flex-col gap-4 overflow-y-auto pr-2">
+                
+                <!-- Voting Strategy -->
+                <div class="glass p-6 rounded-[2rem]">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                        <i data-lucide="git-merge" class="w-4 h-4 text-[--lu-gold]"></i> 1. Voting Strategy
+                    </h3>
+                    
+                    <div class="flex gap-2 bg-slate-900/50 p-1.5 rounded-xl border border-slate-800 mb-2">
+                        <button onclick="setVotingMode('hard')" id="btn-hard" class="toggle-btn active">Hard Voting</button>
+                        <button onclick="setVotingMode('soft')" id="btn-soft" class="toggle-btn">Soft Voting</button>
+                    </div>
+                    <p id="voting-desc" class="text-[9px] text-slate-500 uppercase mt-2 text-center font-bold tracking-widest">
+                        Majority Class Wins
+                    </p>
+                </div>
+
+                <!-- Base Estimators -->
+                <div class="glass p-6 rounded-[2rem] flex-1 flex flex-col">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                            <i data-lucide="cpu" class="w-4 h-4 text-[--neon-blue]"></i> 2. Base Estimators
+                        </h3>
+                    </div>
+                    
+                    <p class="text-[9px] text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-700/50 pb-2">Toggle & Tune Models</p>
+
+                    <div class="space-y-4">
+                        <!-- Logistic Regression -->
+                        <div class="bg-slate-900/50 border border-slate-700/50 rounded-xl overflow-hidden transition-colors hover:border-slate-600">
+                            <label class="flex items-center justify-between p-3 cursor-pointer">
+                                <div class="flex items-center gap-3">
+                                    <input type="checkbox" id="chk-lr" checked onchange="toggleModel('lr')" class="model-checkbox">
+                                    <div>
+                                        <div class="text-sm font-bold text-slate-200">Logistic Regression</div>
+                                        <div class="text-[9px] text-slate-500 uppercase tracking-wider">Linear Boundary</div>
+                                    </div>
+                                </div>
+                                <i data-lucide="info" class="w-4 h-4 text-slate-500 hover:text-[--neon-blue]" onclick="(e)=>{e.preventDefault(); openModal('lr')}"></i>
+                            </label>
+                        </div>
+
+                        <!-- Decision Tree -->
+                        <div class="bg-slate-900/50 border border-slate-700/50 rounded-xl overflow-hidden transition-colors hover:border-slate-600 pb-3">
+                            <label class="flex items-center justify-between p-3 cursor-pointer">
+                                <div class="flex items-center gap-3">
+                                    <input type="checkbox" id="chk-dt" checked onchange="toggleModel('dt')" class="model-checkbox">
+                                    <div>
+                                        <div class="text-sm font-bold text-slate-200">Decision Tree</div>
+                                        <div class="text-[9px] text-slate-500 uppercase tracking-wider">Orthogonal Splits</div>
+                                    </div>
+                                </div>
+                                <i data-lucide="info" class="w-4 h-4 text-slate-500 hover:text-[--neon-blue]" onclick="(e)=>{e.preventDefault(); openModal('dt')}"></i>
+                            </label>
+                            <!-- DT Sub-controls -->
+                            <div class="px-4 mt-1">
+                                <div class="flex justify-between text-[9px] text-slate-400 mb-1 font-mono font-bold uppercase tracking-wider">
+                                    <span>Max Depth</span><span id="dt-depth-val" class="text-[--lu-gold]">3</span>
+                                </div>
+                                <input type="range" id="dt-slider" min="1" max="6" step="1" value="3" oninput="updateDTParams(this.value)" class="w-full slider-custom h-1.5">
+                            </div>
+                        </div>
+
+                        <!-- KNN -->
+                        <div class="bg-slate-900/50 border border-slate-700/50 rounded-xl overflow-hidden transition-colors hover:border-slate-600 pb-3">
+                            <label class="flex items-center justify-between p-3 cursor-pointer">
+                                <div class="flex items-center gap-3">
+                                    <input type="checkbox" id="chk-knn" checked onchange="toggleModel('knn')" class="model-checkbox">
+                                    <div>
+                                        <div class="text-sm font-bold text-slate-200">K-Nearest Neighbors</div>
+                                        <div class="text-[9px] text-slate-500 uppercase tracking-wider">Spatial Distance</div>
+                                    </div>
+                                </div>
+                                <i data-lucide="info" class="w-4 h-4 text-slate-500 hover:text-[--neon-blue]" onclick="(e)=>{e.preventDefault(); openModal('knn')}"></i>
+                            </label>
+                            <!-- KNN Sub-controls -->
+                            <div class="px-4 mt-1">
+                                <div class="flex justify-between text-[9px] text-slate-400 mb-1 font-mono font-bold uppercase tracking-wider">
+                                    <span>K Neighbors</span><span id="knn-k-val" class="text-[--lu-gold]">5</span>
+                                </div>
+                                <input type="range" id="knn-slider" min="1" max="15" step="2" value="5" oninput="updateKNNParams(this.value)" class="w-full slider-custom h-1.5">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-auto pt-6">
+                        <div class="metric-card group" onclick="openModal('ensemble')">
+                            <span class="click-hint"><i data-lucide="zoom-in" class="w-3 h-3"></i></span>
+                            <div class="flex justify-between items-end mb-1">
+                                <div class="text-[10px] text-slate-400 font-bold uppercase mb-1">Ensemble Accuracy</div>
+                                <div class="text-xl font-mono font-black text-[--lu-gold]" id="ensemble-acc">0.0%</div>
+                            </div>
+                            <div class="w-full h-1.5 bg-slate-800 rounded-full mt-2 overflow-hidden">
+                                <div id="acc-bar" class="h-full bg-[--lu-gold] transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- MIDDLE PANEL: MAIN PLOT (FEATURE SPACE) -->
+            <div class="lg:col-span-5 flex flex-col gap-4">
+                <div class="glass p-6 rounded-[2rem] flex-1 relative flex flex-col">
+                    <div class="flex justify-between items-end z-10 mb-4 border-b border-slate-700/50 pb-4">
+                        <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                            <i data-lucide="layout-grid" class="w-4 h-4 text-[--lu-gold]"></i> 3. Feature Space
+                        </h3>
+                        
+                        <!-- Manual Data Point Editor -->
+                        <div class="flex flex-col items-end gap-1">
+                            <span class="text-[8px] text-slate-500 uppercase font-bold tracking-widest">Manual Data Entry</span>
+                            <div class="flex gap-1">
+                                <button onclick="setEditClass(0)" id="btn-class-0" class="px-3 py-1 rounded text-[9px] font-bold uppercase transition-all bg-red-500/20 text-red-400 border border-red-500">Class 0</button>
+                                <button onclick="setEditClass(1)" id="btn-class-1" class="px-3 py-1 rounded text-[9px] font-bold uppercase transition-all bg-slate-800 text-slate-500 border border-slate-700">Class 1</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="main-plot" class="w-full flex-1 relative mt-0 bg-slate-900/50 rounded-2xl border border-white/5 overflow-hidden shadow-inner cursor-crosshair min-h-[300px]">
+                        <!-- Canvas background for super-fast grid rendering -->
+                        <canvas id="bg-canvas" class="absolute inset-0 w-full h-full z-0 opacity-80 rounded-2xl"></canvas>
+                        <!-- SVG overlay for points -->
+                        <svg id="fg-svg" class="absolute inset-0 w-full h-full z-10"></svg>
+                    </div>
+                    
+                    <div class="mt-4 p-3 bg-slate-900/60 rounded-2xl border border-slate-800 text-[10px] text-slate-400 leading-relaxed text-center font-bold uppercase tracking-widest text-[--lu-gold]">
+                        Hover anywhere to see the ensemble voting in real-time!
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL: THE ENSEMBLE ROOM (LIVE DASHBOARD) -->
+            <div class="lg:col-span-4 flex flex-col gap-4">
+                <div class="glass p-6 rounded-[2rem] flex-1 relative flex flex-col border-2 border-transparent dashboard-panel" id="ensemble-room">
+                    <div class="flex justify-between items-start z-10 mb-4 border-b border-slate-700/50 pb-4">
+                        <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                            <i data-lucide="gavel" class="w-4 h-4 text-[--emerald]"></i> 4. The Voting Room
+                        </h3>
+                        <div class="text-[9px] font-mono text-slate-500 uppercase px-2 py-1 bg-slate-800 rounded flex items-center gap-2">
+                            <span id="hover-coords">Waiting...</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex-1 flex flex-col gap-4">
+                        <!-- Live Model 1: LR -->
+                        <div class="bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex flex-col gap-2 relative overflow-hidden transition-all" id="dash-lr">
+                            <div class="flex justify-between items-center z-10">
+                                <span class="text-xs font-bold text-slate-300">Logistic Regression</span>
+                                <span class="text-xs font-mono font-black" id="vote-lr-class">--</span>
+                            </div>
+                            <div class="w-full h-2 bg-slate-800 rounded-full z-10 overflow-hidden relative">
+                                <div id="vote-lr-bar" class="h-full bg-slate-500 vote-bar" style="width: 50%"></div>
+                                <div class="absolute inset-0 flex justify-center items-center opacity-30"><div class="h-full w-px bg-white"></div></div>
+                            </div>
+                            <div class="flex justify-between text-[9px] font-mono text-slate-500 z-10 uppercase tracking-widest">
+                                <span>P(0) <span id="prob-lr-0">--</span></span>
+                                <span>P(1) <span id="prob-lr-1">--</span></span>
+                            </div>
+                        </div>
+
+                        <!-- Live Model 2: DT -->
+                        <div class="bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex flex-col gap-2 relative overflow-hidden transition-all" id="dash-dt">
+                            <div class="flex justify-between items-center z-10">
+                                <span class="text-xs font-bold text-slate-300">Decision Tree</span>
+                                <span class="text-xs font-mono font-black" id="vote-dt-class">--</span>
+                            </div>
+                            <div class="w-full h-2 bg-slate-800 rounded-full z-10 overflow-hidden relative">
+                                <div id="vote-dt-bar" class="h-full bg-slate-500 vote-bar" style="width: 50%"></div>
+                                <div class="absolute inset-0 flex justify-center items-center opacity-30"><div class="h-full w-px bg-white"></div></div>
+                            </div>
+                            <div class="flex justify-between text-[9px] font-mono text-slate-500 z-10 uppercase tracking-widest">
+                                <span>P(0) <span id="prob-dt-0">--</span></span>
+                                <span>P(1) <span id="prob-dt-1">--</span></span>
+                            </div>
+                        </div>
+
+                        <!-- Live Model 3: KNN -->
+                        <div class="bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex flex-col gap-2 relative overflow-hidden transition-all" id="dash-knn">
+                            <div class="flex justify-between items-center z-10">
+                                <span class="text-xs font-bold text-slate-300">K-Nearest Neighbors</span>
+                                <span class="text-xs font-mono font-black" id="vote-knn-class">--</span>
+                            </div>
+                            <div class="w-full h-2 bg-slate-800 rounded-full z-10 overflow-hidden relative">
+                                <div id="vote-knn-bar" class="h-full bg-slate-500 vote-bar" style="width: 50%"></div>
+                                <div class="absolute inset-0 flex justify-center items-center opacity-30"><div class="h-full w-px bg-white"></div></div>
+                            </div>
+                            <div class="flex justify-between text-[9px] font-mono text-slate-500 z-10 uppercase tracking-widest">
+                                <span>P(0) <span id="prob-knn-0">--</span></span>
+                                <span>P(1) <span id="prob-knn-1">--</span></span>
+                            </div>
+                        </div>
+
+                        <!-- FINAL AGGREGATION -->
+                        <div class="mt-auto p-5 bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl border border-[--lu-gold]/30 shadow-2xl relative overflow-hidden">
+                            <div class="absolute -right-4 -bottom-4 opacity-10">
+                                <i data-lucide="scale" class="w-24 h-24 text-[--lu-gold]"></i>
+                            </div>
+                            <h4 class="text-[10px] font-black text-[--lu-gold] uppercase tracking-[0.2em] mb-3 relative z-10">Final Aggregation</h4>
+                            
+                            <div class="flex justify-between items-end relative z-10 mb-2">
+                                <div class="text-sm font-bold text-slate-300" id="agg-formula-text">Hover over plot...</div>
+                                <div class="text-3xl font-mono font-black" id="final-pred-class">--</div>
+                            </div>
+                            
+                            <div class="w-full h-3 bg-slate-950 rounded-full overflow-hidden relative z-10 border border-slate-700">
+                                <div id="final-pred-bar" class="h-full bg-slate-600 transition-all duration-300" style="width: 50%"></div>
+                                <div class="absolute inset-0 flex justify-center items-center opacity-30"><div class="h-full w-0.5 bg-white"></div></div>
+                            </div>
+                            <div class="flex justify-between mt-1 text-[9px] font-mono text-slate-400 z-10 uppercase tracking-widest">
+                                <span>Class 0</span>
+                                <span id="final-prob-display"></span>
+                                <span>Class 1</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- GLOBAL STATE ---
+        let dataset = [];
+        let votingMode = 'hard'; // 'hard' or 'soft'
+        let activeModels = { lr: true, dt: true, knn: true };
+        let editClass = 0;
+
+        // Model Parameters
+        let modelParams = {
+            lr: { w0: 0, w1: 0, w2: 0 },         
+            dt: { root: null, maxDepth: 3 },     
+            knn: { k: 5 }                        
+        };
+
+        // D3 Setup
+        let pWidth, pHeight;
+        let xScale, yScale;
+        let fgSvg, pointsGroup;
+        let canvas, ctx;
+
+        // Configuration
+        const GRID_RES = 6; // Grid resolution for Canvas (higher = faster, slightly blocky. 6 is perfect balance)
+
+        // --- EDUCATIONAL CONTENT DICTIONARY ---
+        const metricInfo = {
+            lr: {
+                title: "Logistic Regression",
+                def: "A linear model that uses Gradient Descent to optimize the Binary Cross-Entropy loss. It fits a continuous probability boundary.",
+                form: "P(Y=1) = 1 / (1 + e^-(w₀ + w₁X₁ + w₂X₂))",
+                interp: "Strengths: Mathematically robust, smooth linear boundary. Weaknesses: Fails if classes cannot be separated by a single straight line (like moon shapes)."
+            },
+            dt: {
+                title: "Decision Tree (CART)",
+                def: "A non-linear model that recursively splits the feature space using orthogonal (horizontal and vertical) rules to minimize Gini Impurity.",
+                form: "Gini = 1 - ∑(pᵢ²)",
+                interp: "Strengths: Easily captures complex, blocky patterns. Weaknesses: Prone to overfitting, creating a 'staircase' boundary."
+            },
+            knn: {
+                title: "K-Nearest Neighbors",
+                def: "An instance-based model that looks at the Euclidean distance to the 'K' closest training data points to make a classification.",
+                form: "Distance = √[ (x₂-x₁)² + (y₂-y₁)² ]",
+                interp: "Strengths: Learns highly irregular shapes seamlessly. Weaknesses: Computationally heavy and sensitive to noisy outliers."
+            },
+            ensemble: {
+                title: "The Voting Ensemble",
+                def: "A meta-algorithm that aggregates the predictions of multiple diverse base estimators to form a single, robust final prediction.",
+                form: "Hard: Mode(C₁, C₂, C₃) | Soft: Mean(P₁, P₂, P₃)",
+                interp: "Wisdom of the Crowd: By combining models that make DIFFERENT types of errors, the ensemble cancels out individual weaknesses, yielding a superior boundary."
+            }
+        };
+
+        window.openModal = function(metricType) {
+            const info = metricInfo[metricType];
+            if(!info) return;
+
+            document.getElementById('modal-title').innerText = info.title;
+            document.getElementById('modal-def').innerText = info.def;
+            document.getElementById('modal-form').innerText = info.form;
+            document.getElementById('modal-interp').innerHTML = info.interp;
+
+            const modal = document.getElementById('metric-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                document.getElementById('modal-content-box').classList.remove('scale-95');
+            }, 10);
+        }
+
+        window.closeModal = function() {
+            const modal = document.getElementById('metric-modal');
+            modal.classList.add('opacity-0');
+            document.getElementById('modal-content-box').classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }, 300);
+        }
+        document.getElementById('metric-modal').addEventListener('click', function(e) {
+            if(e.target === this) window.closeModal();
+        });
+
+        // --- MATH & ALGORITHMS ---
+
+        // 1. Logistic Regression (Stable Gradient Descent)
+        function trainLR(data) {
+            let w0 = 0, w1 = 0, w2 = 0;
+            const lr = 0.5;
+            const epochs = 500;
+            const n = data.length;
+            
+            if (n === 0) {
+                modelParams.lr = { w0: 0, w1: 0, w2: 0 };
+                return;
+            }
+
+            for (let i = 0; i < epochs; i++) {
+                let dw0 = 0, dw1 = 0, dw2 = 0;
+                for (let j = 0; j < n; j++) {
+                    const d = data[j];
+                    const nx = (d.x - 50) / 50;
+                    const ny = (d.y - 50) / 50;
+                    const z = w0 + w1 * nx + w2 * ny;
+                    const p = 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, z))));
+                    const err = p - d.class;
+                    
+                    dw0 += err;
+                    dw1 += err * nx;
+                    dw2 += err * ny;
+                }
+                w0 -= lr * (dw0 / n);
+                w1 -= lr * (dw1 / n);
+                w2 -= lr * (dw2 / n);
+            }
+            modelParams.lr = { w0, w1, w2 };
+        }
+
+        function predictLR(x, y) {
+            if (dataset.length === 0) return 0.5;
+            const nx = (x - 50) / 50;
+            const ny = (y - 50) / 50;
+            const z = modelParams.lr.w0 + modelParams.lr.w1 * nx + modelParams.lr.w2 * ny;
+            return 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, z))));
+        }
+
+        // 2. Decision Tree (CART)
+        function calculateImpurity(subset) {
+            if (subset.length === 0) return 0;
+            let c1 = 0;
+            for(let i=0; i<subset.length; i++) if(subset[i].class === 1) c1++;
+            let p1 = c1 / subset.length;
+            let p0 = 1 - p1;
+            return 1 - (p1 * p1 + p0 * p0);
+        }
+
+        function findBestSplitDT(subset) {
+            if (subset.length < 2) return null;
+            const parentImpurity = calculateImpurity(subset);
+            if (parentImpurity === 0) return null;
+
+            let best = null;
+            let maxGain = -1;
+
+            ['x', 'y'].forEach(feature => {
+                const sorted = [...subset].sort((a, b) => a[feature] - b[feature]);
+                for (let i = 0; i < sorted.length - 1; i++) {
+                    if (sorted[i][feature] === sorted[i+1][feature]) continue;
+                    
+                    const threshold = (sorted[i][feature] + sorted[i+1][feature]) / 2;
+                    const left = subset.filter(d => d[feature] <= threshold);
+                    const right = subset.filter(d => d[feature] > threshold);
+                    
+                    if (left.length === 0 || right.length === 0) continue;
+                    
+                    const gain = parentImpurity - (left.length / subset.length * calculateImpurity(left) + right.length / subset.length * calculateImpurity(right));
+                    
+                    if (gain > maxGain) {
+                        maxGain = gain;
+                        best = { feature, threshold, left, right };
+                    }
+                }
+            });
+            return best;
+        }
+
+        function buildDT(subset, depth) {
+            let c1 = 0;
+            for(let i=0; i<subset.length; i++) if(subset[i].class === 1) c1++;
+            const prob = subset.length === 0 ? 0 : c1 / subset.length;
+            
+            if (depth === 0 || subset.length < 2 || calculateImpurity(subset) === 0) {
+                return { isLeaf: true, prob: prob };
+            }
+
+            const split = findBestSplitDT(subset);
+            if (!split) return { isLeaf: true, prob: prob };
+
+            return {
+                isLeaf: false,
+                feature: split.feature,
+                threshold: split.threshold,
+                left: buildDT(split.left, depth - 1),
+                right: buildDT(split.right, depth - 1)
+            };
+        }
+
+        function predictDTTNode(node, x, y) {
+            if (node.isLeaf) return node.prob;
+            const val = node.feature === 'x' ? x : y;
+            if (val <= node.threshold) return predictDTTNode(node.left, x, y);
+            return predictDTTNode(node.right, x, y);
+        }
+
+        function trainDT(data) {
+            modelParams.dt.root = buildDT(data, modelParams.dt.maxDepth);
+        }
+
+        function predictDT(x, y) {
+            if (!modelParams.dt.root) return 0.5;
+            return predictDTTNode(modelParams.dt.root, x, y);
+        }
+
+        // 3. K-Nearest Neighbors
+        function predictKNN(x, y) {
+            const n = dataset.length;
+            if (n === 0) return 0.5;
+            
+            const k = Math.min(modelParams.knn.k, n);
+            // Highly optimized sort-based distance measure
+            let dists = [];
+            for (let i = 0; i < n; i++) {
+                const d = dataset[i];
+                dists.push({ c: d.class, d: (d.x - x)**2 + (d.y - y)**2 });
+            }
+            dists.sort((a,b) => a.d - b.d);
+            
+            let c1Votes = 0;
+            for (let i = 0; i < k; i++) {
+                if (dists[i].c === 1) c1Votes++;
+            }
+            return c1Votes / k;
+        }
+
+        // --- ENSEMBLE LOGIC ---
+        function predictEnsemble(x, y) {
+            let probs = [];
+            let details = {};
+
+            if (activeModels.lr) { const p = predictLR(x, y); probs.push(p); details.lr = p; }
+            if (activeModels.dt) { const p = predictDT(x, y); probs.push(p); details.dt = p; }
+            if (activeModels.knn) { const p = predictKNN(x, y); probs.push(p); details.knn = p; }
+
+            if (probs.length === 0) return { finalProb: 0.5, finalClass: -1, details };
+
+            let finalProb = 0.5;
+            if (votingMode === 'soft') {
+                finalProb = probs.reduce((a, b) => a + b, 0) / probs.length;
+            } else {
+                let votes1 = 0;
+                for(let i=0; i<probs.length; i++) { if(probs[i] >= 0.5) votes1++; }
+                finalProb = (votes1 > probs.length / 2) ? 1.0 : (votes1 === probs.length / 2 ? 0.5 : 0.0);
+            }
+
+            return { 
+                finalProb, 
+                finalClass: finalProb > 0.5 ? 1 : (finalProb < 0.5 ? 0 : -1), 
+                details 
+            };
+        }
+
+        function trainAll() {
+            trainLR(dataset);
+            trainDT(dataset);
+            updateGridCanvas();
+            updateAccuracy();
+            renderPoints();
+        }
+
+        // --- CONTROLS ---
+        window.setVotingMode = function(mode) {
+            votingMode = mode;
+            document.getElementById('btn-hard').classList.toggle('active', mode === 'hard');
+            document.getElementById('btn-soft').classList.toggle('active', mode === 'soft');
+            document.getElementById('voting-desc').innerText = mode === 'hard' ? "Majority Class Wins" : "Average Probabilities Win";
+            updateGridCanvas();
+            updateAccuracy();
+        }
+
+        window.toggleModel = function(model) {
+            activeModels[model] = document.getElementById(`chk-${model}`).checked;
+            updateGridCanvas();
+            updateAccuracy();
+        }
+
+        window.updateDTParams = function(val) {
+            modelParams.dt.maxDepth = parseInt(val);
+            document.getElementById('dt-depth-val').innerText = val;
+            trainDT(dataset);
+            updateGridCanvas();
+            updateAccuracy();
+        }
+
+        window.updateKNNParams = function(val) {
+            modelParams.knn.k = parseInt(val);
+            document.getElementById('knn-k-val').innerText = val;
+            updateGridCanvas();
+            updateAccuracy();
+        }
+
+        window.setEditClass = function(c) {
+            editClass = c;
+            document.getElementById('btn-class-0').className = "px-3 py-1 rounded text-[9px] font-bold uppercase transition-all bg-slate-800 text-slate-500 border border-slate-700";
+            document.getElementById('btn-class-1').className = "px-3 py-1 rounded text-[9px] font-bold uppercase transition-all bg-slate-800 text-slate-500 border border-slate-700";
+            
+            if (c === 0) {
+                document.getElementById('btn-class-0').className = "px-3 py-1 rounded text-[9px] font-bold uppercase transition-all bg-red-500/20 text-red-400 border border-red-500";
+            } else {
+                document.getElementById('btn-class-1').className = "px-3 py-1 rounded text-[9px] font-bold uppercase transition-all bg-green-500/20 text-green-400 border border-green-500";
+            }
+        }
+
+        window.clearData = function() {
+            dataset = [];
+            trainAll();
+            resetDashboard();
+        }
+
+        window.generateData = function(type) {
+            dataset = [];
+            const n = 50;
+
+            if (type) {
+                ['moons', 'linear'].forEach(t => {
+                    const btn = document.getElementById(`btn-data-${t}`);
+                    if (!btn) return;
+                    if(t === type) {
+                        btn.className = `px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all bg-white/10 text-white border border-blue-500/30`;
+                    } else {
+                        btn.className = `px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all text-slate-400 hover:bg-white/5 ml-2`;
+                    }
+                });
+            }
+
+            // Fallback default
+            type = type || 'moons';
+
+            if (type === 'moons') {
+                for (let i = 0; i < n; i++) {
+                    const t = Math.random() * Math.PI;
+                    dataset.push({
+                        id: `c0_${i}`, class: 0,
+                        x: 50 + 25 * Math.cos(t) + d3.randomNormal(0, 5)(),
+                        y: 65 - 25 * Math.sin(t) + d3.randomNormal(0, 5)()
+                    });
+                    dataset.push({
+                        id: `c1_${i}`, class: 1,
+                        x: 50 + 25 * Math.cos(t + Math.PI) + 15 + d3.randomNormal(0, 5)(),
+                        y: 35 - 25 * Math.sin(t + Math.PI) + 10 + d3.randomNormal(0, 5)()
+                    });
+                }
+            } else {
+                for (let i = 0; i < n; i++) {
+                    dataset.push({
+                        id: `c0_${i}`, class: 0,
+                        x: d3.randomNormal(30, 10)(), y: d3.randomNormal(70, 10)()
+                    });
+                    dataset.push({
+                        id: `c1_${i}`, class: 1,
+                        x: d3.randomNormal(70, 10)(), y: d3.randomNormal(30, 10)()
+                    });
+                }
+            }
+
+            dataset.forEach(d => {
+                d.x = Math.max(5, Math.min(95, d.x));
+                d.y = Math.max(5, Math.min(95, d.y));
+            });
+
+            trainAll();
+        }
+
+        // --- FAST D3 + CANVAS RENDERING ---
+        function init() {
+            lucide.createIcons();
+            
+            const container = document.getElementById('main-plot');
+            pWidth = container.clientWidth;
+            pHeight = container.clientHeight;
+            
+            // 1. Setup Canvas for super-fast background
+            canvas = document.getElementById('bg-canvas');
+            canvas.width = pWidth;
+            canvas.height = pHeight;
+            ctx = canvas.getContext('2d', { alpha: false }); // Optimize for no transparency needed in base
+
+            // 2. Setup SVG overlay for interactive points
+            fgSvg = d3.select("#fg-svg");
+            xScale = d3.scaleLinear().domain([0, 100]).range([0, pWidth]);
+            yScale = d3.scaleLinear().domain([0, 100]).range([pHeight, 0]);
+
+            pointsGroup = fgSvg.append("g");
+            
+            fgSvg.on("click", (event) => {
+                // Ignore clicks on points themselves (handled by drag)
+                if (event.target.tagName !== 'svg') return; 
+                
+                const [px, py] = d3.pointer(event);
+                dataset.push({
+                    id: Date.now(),
+                    x: xScale.invert(px),
+                    y: yScale.invert(py),
+                    class: editClass
+                });
+                trainAll();
+            })
+            .on("mousemove", (event) => {
+                const [px, py] = d3.pointer(event);
+                updateDashboard(xScale.invert(px), yScale.invert(py));
+            })
+            .on("mouseout", () => {
+                resetDashboard();
+            });
+
+            window.generateData('moons');
+        }
+
+        // Extremely fast Canvas rendering
+        function updateGridCanvas() {
+            if (!ctx) return;
+            
+            // Clear Background
+            ctx.fillStyle = "#0f172a"; // Match obsidian
+            ctx.fillRect(0, 0, pWidth, pHeight);
+            
+            if (dataset.length === 0 || (!activeModels.lr && !activeModels.dt && !activeModels.knn)) return;
+
+            // Draw grid rectangles
+            for (let px = 0; px < pWidth; px += GRID_RES) {
+                for (let py = 0; py < pHeight; py += GRID_RES) {
+                    const x = xScale.invert(px + GRID_RES/2);
+                    const y = yScale.invert(py + GRID_RES/2);
+                    const res = predictEnsemble(x, y);
+                    
+                    if (res.finalClass !== -1) {
+                        ctx.fillStyle = res.finalClass === 1 ? "rgba(16, 185, 129, 0.2)" : "rgba(239, 68, 68, 0.2)";
+                        ctx.fillRect(px, py, GRID_RES, GRID_RES);
+                    }
+                }
+            }
+        }
+
+        function renderPoints() {
+            const circles = pointsGroup.selectAll(".data-point").data(dataset, d => d.id);
+            
+            const circlesEnter = circles.enter().append("circle")
+                .attr("class", d => `data-point class-${d.class}`)
+                .attr("r", 5)
+                .on("click", (event, d) => {
+                    event.stopPropagation();
+                    // Click to remove
+                    dataset = dataset.filter(p => p.id !== d.id);
+                    trainAll();
+                })
+                .call(d3.drag()
+                    .on("drag", (e, d) => {
+                        // Drag to move
+                        d.x = Math.max(0, Math.min(100, xScale.invert(e.x)));
+                        d.y = Math.max(0, Math.min(100, yScale.invert(e.y)));
+                        // Update visual position instantly
+                        d3.select(e.sourceEvent.target).attr("cx", xScale(d.x)).attr("cy", yScale(d.y));
+                        // Re-train heavily optimized models on the fly
+                        trainAll();
+                    })
+                );
+                
+            circles.merge(circlesEnter)
+                .attr("cx", d => xScale(d.x))
+                .attr("cy", d => yScale(d.y));
+
+            circles.exit().remove();
+        }
+
+        // --- DASHBOARD UPDATES ---
+        function updateDashboard(x, y) {
+            document.getElementById('hover-coords').innerText = `X: ${x.toFixed(0)}, Y: ${y.toFixed(0)}`;
+            if (dataset.length === 0) return;
+            const res = predictEnsemble(x, y);
+
+            const updateModelDash = (id, prob, isActive) => {
+                const el = document.getElementById(`dash-${id}`);
+                if (!isActive) {
+                    el.style.opacity = '0.3';
+                    document.getElementById(`vote-${id}-class`).innerText = "OFF";
+                    document.getElementById(`vote-${id}-bar`).style.backgroundColor = "#64748b";
+                    return;
+                }
+                el.style.opacity = '1';
+                
+                const predictedClass = prob >= 0.5 ? 1 : 0;
+                const cText = document.getElementById(`vote-${id}-class`);
+                cText.innerText = `C${predictedClass}`;
+                cText.style.color = predictedClass === 1 ? 'var(--class-1)' : 'var(--class-0)';
+                
+                document.getElementById(`prob-${id}-0`).innerText = (1 - prob).toFixed(2);
+                document.getElementById(`prob-${id}-1`).innerText = prob.toFixed(2);
+                
+                const bar = document.getElementById(`vote-${id}-bar`);
+                bar.style.width = `${prob * 100}%`;
+                bar.style.backgroundColor = prob >= 0.5 ? 'var(--class-1)' : 'var(--class-0)';
+            };
+
+            updateModelDash('lr', res.details.lr, activeModels.lr);
+            updateModelDash('dt', res.details.dt, activeModels.dt);
+            updateModelDash('knn', res.details.knn, activeModels.knn);
+
+            const mainPanel = document.getElementById('ensemble-room');
+            const cFinal = document.getElementById('final-pred-class');
+            const bFinal = document.getElementById('final-pred-bar');
+            
+            if (res.finalClass === -1) {
+                cFinal.innerText = "TIE";
+                cFinal.style.color = "white";
+                bFinal.style.width = "50%";
+                bFinal.style.backgroundColor = "#64748b";
+                mainPanel.className = "glass p-6 rounded-[2rem] flex-1 relative flex flex-col border-2 border-transparent dashboard-panel";
+            } else {
+                cFinal.innerText = `Class ${res.finalClass}`;
+                cFinal.style.color = res.finalClass === 1 ? 'var(--class-1)' : 'var(--class-0)';
+                bFinal.style.width = `${res.finalProb * 100}%`;
+                bFinal.style.backgroundColor = res.finalClass === 1 ? 'var(--class-1)' : 'var(--class-0)';
+                mainPanel.className = `glass p-6 rounded-[2rem] flex-1 relative flex flex-col border-2 dashboard-panel win-glow-${res.finalClass}`;
+            }
+
+            document.getElementById('final-prob-display').innerText = `Prob: ${res.finalProb.toFixed(3)}`;
+
+            let formulaStr = "";
+            let activeCount = Object.values(activeModels).filter(Boolean).length;
+            if (activeCount === 0) {
+                formulaStr = "No models active.";
+            } else if (votingMode === 'hard') {
+                let v1 = 0;
+                if (activeModels.lr && res.details.lr >= 0.5) v1++;
+                if (activeModels.dt && res.details.dt >= 0.5) v1++;
+                if (activeModels.knn && res.details.knn >= 0.5) v1++;
+                formulaStr = `Majority Vote: ${v1} vs ${activeCount - v1}`;
+            } else {
+                formulaStr = `Average Probability (${activeCount} models)`;
+            }
+            document.getElementById('agg-formula-text').innerText = formulaStr;
+        }
+
+        function resetDashboard() {
+            document.getElementById('hover-coords').innerText = "Waiting...";
+            const mainPanel = document.getElementById('ensemble-room');
+            mainPanel.className = "glass p-6 rounded-[2rem] flex-1 relative flex flex-col border-2 border-transparent dashboard-panel";
+            document.getElementById('final-pred-class').innerText = "--";
+            document.getElementById('final-pred-class').style.color = "white";
+            document.getElementById('final-pred-bar').style.width = "50%";
+            document.getElementById('final-pred-bar').style.backgroundColor = "#64748b";
+            document.getElementById('agg-formula-text').innerText = "Hover over plot...";
+            document.getElementById('final-prob-display').innerText = "";
+        }
+
+        function updateAccuracy() {
+            if (dataset.length === 0 || (!activeModels.lr && !activeModels.dt && !activeModels.knn)) {
+                document.getElementById('ensemble-acc').innerText = "0.0%";
+                document.getElementById('acc-bar').style.width = "0%";
+                return;
+            }
+
+            let correct = 0;
+            dataset.forEach(d => {
+                const res = predictEnsemble(d.x, d.y);
+                if (res.finalClass === d.class) correct++;
+            });
+
+            const acc = correct / dataset.length;
+            document.getElementById('ensemble-acc').innerText = `${(acc * 100).toFixed(1)}%`;
+            document.getElementById('acc-bar').style.width = `${acc * 100}%`;
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
